@@ -1,0 +1,521 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Coco - Carnet de Vacunas</title>
+  <meta name="description" content="Carnet de vacunas digital de Coco, el schnauzer mas bonito." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Firebase CDN -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    :root {
+      --cream:#FAF7F2; --white:#FFFFFF; --coffee:#7B4F2E; --coffee-lt:#A0673A;
+      --coffee-dk:#4A2E16; --caramel:#C9894A; --tan:#E8D5B7; --tan-dk:#D4B896;
+      --black:#1A1008; --gray:#6B5C4E; --gray-lt:#B5A898;
+      --shadow:0 8px 32px rgba(74,46,22,0.12); --radius:20px; --radius-sm:12px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Outfit', sans-serif; background: var(--cream); color: var(--black); min-height: 100vh; overflow-x: hidden; }
+    body::before { content: ''; position: fixed; inset: 0; background-image: radial-gradient(circle at 20% 20%, rgba(123,79,46,.06) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(201,137,74,.06) 0%, transparent 50%); pointer-events: none; z-index: 0; }
+
+    /* ── Header ── */
+    header { background: linear-gradient(135deg, var(--coffee-dk) 0%, var(--coffee) 60%, var(--coffee-lt) 100%); padding: 0; position: relative; overflow: hidden; }
+    header::before { content: ''; position: absolute; top: -60px; right: -60px; width: 200px; height: 200px; background: rgba(255,255,255,.05); border-radius: 50%; }
+    header::after  { content: ''; position: absolute; bottom: -40px; left: -40px; width: 160px; height: 160px; background: rgba(255,255,255,.04); border-radius: 50%; }
+    .header-inner { max-width: 920px; margin: 0 auto; padding: 32px 24px; display: flex; align-items: center; gap: 24px; position: relative; z-index: 1; }
+    .dog-avatar { width: 110px; height: 110px; border-radius: 50%; background: var(--tan); border: 4px solid rgba(255,255,255,.35); object-fit: cover; flex-shrink: 0; box-shadow: 0 4px 20px rgba(0,0,0,.25); }
+    .dog-info h1 { font-size: 2.4rem; font-weight: 800; color: #fff; line-height: 1.1; letter-spacing: -.5px; }
+    .breed-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.15); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,.25); color: #fff; font-size: .85rem; font-weight: 500; padding: 4px 12px; border-radius: 20px; margin-top: 6px; }
+    .subtitle { color: rgba(255,255,255,.7); font-size: .85rem; margin-top: 6px; display: flex; align-items: center; gap: 8px; }
+    .sync-dot { width: 8px; height: 8px; border-radius: 50%; background: #4CAF50; display: inline-block; animation: pulse 2s infinite; }
+    .sync-dot.offline { background: #FF9800; animation: none; }
+    .sync-dot.error  { background: #F44336; animation: none; }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.6;transform:scale(1.3)} }
+
+    /* ── Tabs ── */
+    .tabs { background: var(--coffee-dk); display: flex; justify-content: center; gap: 4px; padding: 0 24px 12px; }
+    .tab-btn { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); color: rgba(255,255,255,.65); font-family: 'Outfit', sans-serif; font-size: .9rem; font-weight: 500; padding: 8px 20px; border-radius: 30px; cursor: pointer; transition: all .25s ease; }
+    .tab-btn:hover  { background: rgba(255,255,255,.16); color: #fff; }
+    .tab-btn.active { background: #fff; color: var(--coffee-dk); border-color: #fff; font-weight: 700; }
+
+    /* ── Layout ── */
+    main { max-width: 920px; margin: 0 auto; padding: 28px 20px 60px; position: relative; z-index: 1; }
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* ── Card ── */
+    .card { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); padding: 28px; margin-bottom: 20px; border: 1px solid rgba(123,79,46,.08); transition: transform .2s ease; }
+    .card:hover { transform: translateY(-2px); }
+    .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+    .card-title { font-size: 1.1rem; font-weight: 700; color: var(--coffee-dk); display: flex; align-items: center; gap: 8px; }
+    .card-title .icon { width: 36px; height: 36px; background: linear-gradient(135deg, var(--coffee), var(--caramel)); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
+
+    /* ── Stats ── */
+    .stats-bar { display: flex; gap: 14px; margin-bottom: 24px; flex-wrap: wrap; }
+    .stat-chip { background: var(--white); border-radius: 14px; padding: 12px 18px; display: flex; align-items: center; gap: 10px; box-shadow: 0 2px 10px rgba(74,46,22,.07); flex: 1; min-width: 130px; border: 1px solid var(--tan); }
+    .stat-chip .stat-icon { font-size: 1.4rem; }
+    .stat-chip .stat-text strong { display: block; font-size: 1.3rem; font-weight: 800; color: var(--coffee-dk); }
+    .stat-chip .stat-text span  { font-size: .75rem; color: var(--gray); font-weight: 500; }
+
+    /* ── Vaccine list ── */
+    .vaccine-list { display: flex; flex-direction: column; gap: 12px; }
+    .vaccine-item { background: var(--cream); border: 1px solid var(--tan-dk); border-radius: var(--radius-sm); padding: 16px 18px; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 16px; transition: all .2s ease; animation: slideIn .3s ease; }
+    @keyframes slideIn { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+    .vaccine-item:hover { border-color: var(--caramel); background: #FFF9F4; }
+    .vaccine-name { font-weight: 700; font-size: 1rem; color: var(--black); }
+    .vaccine-meta { font-size: .8rem; color: var(--gray); margin-top: 2px; }
+    .vaccine-dates { text-align: right; }
+    .date-label { font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--gray); }
+    .date-value { font-size: .9rem; font-weight: 600; color: var(--coffee); }
+    .status-badge { padding: 6px 14px; border-radius: 20px; font-size: .78rem; font-weight: 700; white-space: nowrap; }
+    .status-ok  { background: #E8F5E9; color: #2E7D32; }
+    .status-due { background: #FFF3E0; color: #E65100; }
+    .status-exp { background: #FFEBEE; color: #C62828; }
+    .delete-btn { background: none; border: none; color: var(--gray-lt); cursor: pointer; font-size: 1.1rem; padding: 4px; border-radius: 6px; transition: all .2s; }
+    .delete-btn:hover { color: #C62828; background: #FFEBEE; }
+
+    /* ── Add form ── */
+    .add-form { background: linear-gradient(135deg, #FFF9F4, var(--cream)); border: 2px dashed var(--tan-dk); border-radius: var(--radius-sm); padding: 22px; margin-top: 16px; display: none; }
+    .add-form.open { display: block; animation: fadeIn .25s ease; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
+    .form-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; margin-bottom: 14px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group label { font-size: .75rem; font-weight: 600; color: var(--gray); text-transform: uppercase; letter-spacing: .6px; }
+    .form-group input, .form-group select, .form-group textarea { background: var(--white); border: 1.5px solid var(--tan-dk); border-radius: 10px; padding: 10px 14px; font-family: 'Outfit', sans-serif; font-size: .95rem; color: var(--black); outline: none; transition: border-color .2s; }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--coffee); }
+    .form-group textarea { resize: vertical; min-height: 70px; }
+    .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+
+    /* ── Buttons ── */
+    .btn { display: inline-flex; align-items: center; gap: 8px; font-family: 'Outfit', sans-serif; font-size: .9rem; font-weight: 600; padding: 10px 20px; border-radius: 12px; border: none; cursor: pointer; transition: all .25s ease; }
+    .btn-primary { background: linear-gradient(135deg, var(--coffee), var(--coffee-lt)); color: #fff; box-shadow: 0 4px 14px rgba(123,79,46,.3); }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(123,79,46,.4); }
+    .btn-primary:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+    .btn-ghost { background: transparent; color: var(--gray); border: 1.5px solid var(--tan-dk); }
+    .btn-ghost:hover { border-color: var(--coffee); color: var(--coffee); }
+    .btn-sm { padding: 7px 14px; font-size: .82rem; }
+
+    /* ── Profile ── */
+    .profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+    .profile-field { background: var(--cream); border-radius: var(--radius-sm); padding: 14px 16px; border: 1px solid var(--tan-dk); }
+    .profile-field label { display: block; font-size: .75rem; font-weight: 600; color: var(--gray); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 6px; }
+    .profile-field input, .profile-field select { width: 100%; background: none; border: none; outline: none; font-family: 'Outfit', sans-serif; font-size: 1rem; font-weight: 600; color: var(--black); }
+
+    /* ── Notes ── */
+    .note-item { background: var(--cream); border-left: 4px solid var(--caramel); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; padding: 14px 16px; margin-bottom: 10px; animation: slideIn .3s ease; }
+    .note-item .note-date { font-size: .75rem; color: var(--gray); font-weight: 500; margin-bottom: 4px; }
+    .note-item .note-text { color: var(--black); font-size: .95rem; line-height: 1.5; }
+    .note-item .note-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+    /* ── Empty / loading ── */
+    .empty-state { text-align: center; padding: 40px 20px; color: var(--gray); }
+    .empty-state .empty-icon { font-size: 2.5rem; margin-bottom: 10px; }
+    .empty-state p { font-size: .95rem; line-height: 1.6; }
+    .loading-spinner { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 32px; color: var(--gray); font-size: .95rem; }
+    .spinner { width: 24px; height: 24px; border: 3px solid var(--tan-dk); border-top-color: var(--coffee); border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to{ transform: rotate(360deg); } }
+
+    /* ── Decorators ── */
+    .paw-divider { display: flex; align-items: center; gap: 10px; margin: 20px 0; color: var(--gray-lt); font-size: .8rem; }
+    .paw-divider::before, .paw-divider::after { content: ''; flex: 1; height: 1px; background: var(--tan-dk); }
+
+    /* ── Toast ── */
+    .toast-container { position: fixed; bottom: 28px; right: 24px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
+    .toast { padding: 12px 20px; border-radius: 14px; font-size: .9rem; font-weight: 500; box-shadow: 0 4px 20px rgba(0,0,0,.2); animation: toastIn .3s ease; display: flex; align-items: center; gap: 8px; }
+    .toast-success { background: var(--coffee-dk); color: #fff; }
+    .toast-error   { background: #C62828; color: #fff; }
+    @keyframes toastIn { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+
+    /* ── Responsive ── */
+    @media(max-width:600px) {
+      .header-inner { flex-direction: column; text-align: center; gap: 16px; }
+      .dog-info h1  { font-size: 2rem; }
+      .vaccine-item { grid-template-columns: 1fr; }
+      .vaccine-dates { text-align: left; }
+      .stats-bar { flex-direction: column; }
+    }
+    @media print {
+      header { background: var(--coffee-dk)!important; -webkit-print-color-adjust: exact; }
+      .tabs,.btn,.delete-btn,.add-form,.toast-container,.sync-dot { display: none!important; }
+      .section { display: block!important; }
+      .card { box-shadow: none; border: 1px solid var(--tan-dk); page-break-inside: avoid; }
+      body { background: white; }
+    }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: var(--cream); }
+    ::-webkit-scrollbar-thumb { background: var(--tan-dk); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--caramel); }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="header-inner">
+    <img src="coco.jpg" alt="Coco el schnauzer" class="dog-avatar"
+      onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%23D4B896%22/><text y=%22.9em%22 font-size=%2270%22 x=%2215%22>🐶</text></svg>'" />
+    <div class="dog-info">
+      <h1>Coco 🐾</h1>
+      <div class="breed-badge">✂️ Mini Schnauzer Mix</div>
+      <p class="subtitle">
+        <span class="sync-dot offline" id="syncDot"></span>
+        <span id="syncStatus">Conectando...</span>
+      </p>
+    </div>
+  </div>
+</header>
+
+<!-- Tabs -->
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('vacunas')" id="tab-vacunas">💉 Vacunas</button>
+  <button class="tab-btn" onclick="switchTab('perfil')"  id="tab-perfil">🐶 Perfil</button>
+  <button class="tab-btn" onclick="switchTab('notas')"   id="tab-notas">📝 Notas</button>
+</div>
+
+<main>
+
+  <!-- ── VACUNAS ── -->
+  <div class="section active" id="section-vacunas">
+    <div class="stats-bar">
+      <div class="stat-chip"><span class="stat-icon">💉</span><div class="stat-text"><strong id="statTotal">—</strong><span>Total vacunas</span></div></div>
+      <div class="stat-chip"><span class="stat-icon">✅</span><div class="stat-text"><strong id="statOk">—</strong><span>Al dia</span></div></div>
+      <div class="stat-chip"><span class="stat-icon">⏰</span><div class="stat-text"><strong id="statDue">—</strong><span>Proximas (30d)</span></div></div>
+      <div class="stat-chip"><span class="stat-icon">❌</span><div class="stat-text"><strong id="statExp">—</strong><span>Vencidas</span></div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><div class="icon">💉</div>Historial de Vacunas</div>
+        <button class="btn btn-primary btn-sm" onclick="toggleAddForm()" id="addToggleBtn">+ Agregar</button>
+      </div>
+
+      <div class="add-form" id="addForm">
+        <div class="form-row">
+          <div class="form-group"><label>Nombre de la Vacuna *</label><input type="text" id="fName" placeholder="ej. Rabia, Parvovirus..." /></div>
+          <div class="form-group"><label>Fecha de aplicacion *</label><input type="date" id="fDate" /></div>
+          <div class="form-group"><label>Proxima dosis</label><input type="date" id="fNext" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Veterinario</label><input type="text" id="fVet" placeholder="Nombre del vet" /></div>
+          <div class="form-group"><label>Lote / Marca</label><input type="text" id="fBatch" placeholder="ej. Nobivac" /></div>
+          <div class="form-group"><label>Notas</label><input type="text" id="fNote" placeholder="Observaciones..." /></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-ghost btn-sm" onclick="toggleAddForm()">Cancelar</button>
+          <button class="btn btn-primary btn-sm" onclick="saveVaccine()" id="saveVaccBtn">💾 Guardar</button>
+        </div>
+      </div>
+
+      <div class="paw-divider">🐾</div>
+      <div class="vaccine-list" id="vaccineList">
+        <div class="loading-spinner"><div class="spinner"></div>Cargando desde Firebase...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PERFIL ── -->
+  <div class="section" id="section-perfil">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><div class="icon">🐶</div>Datos de Coco</div>
+        <button class="btn btn-primary btn-sm" onclick="saveProfile()" id="saveProfileBtn">💾 Guardar</button>
+      </div>
+      <div class="profile-grid">
+        <div class="profile-field"><label>Nombre</label><input type="text" id="pName" placeholder="Coco" /></div>
+        <div class="profile-field"><label>Raza</label><input type="text" id="pBreed" placeholder="Mini Schnauzer Mix" /></div>
+        <div class="profile-field"><label>Fecha de nacimiento</label><input type="date" id="pBirthday" /></div>
+        <div class="profile-field"><label>Sexo</label><select id="pSex"><option value="">—</option><option>Macho</option><option>Hembra</option></select></div>
+        <div class="profile-field"><label>Color / Pelaje</label><input type="text" id="pColor" placeholder="ej. Gris y blanco" /></div>
+        <div class="profile-field"><label>Peso (kg)</label><input type="number" id="pWeight" placeholder="ej. 6.5" step="0.1" /></div>
+        <div class="profile-field"><label>Microchip</label><input type="text" id="pChip" placeholder="Numero de chip" /></div>
+        <div class="profile-field"><label>Veterinario</label><input type="text" id="pVet" placeholder="Nombre del vet" /></div>
+        <div class="profile-field"><label>Tel Veterinario</label><input type="tel" id="pVetPhone" placeholder="+52 55 0000 0000" /></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── NOTAS ── -->
+  <div class="section" id="section-notas">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><div class="icon">📝</div>Notas y Observaciones</div>
+      </div>
+      <div class="form-group" style="margin-bottom:12px">
+        <textarea id="noteInput" placeholder="Escribe una nota... (reacciones, medicamentos, visitas, peso...)" rows="3"></textarea>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:20px">
+        <button class="btn btn-primary btn-sm" onclick="saveNote()" id="saveNoteBtn">+ Agregar nota</button>
+      </div>
+      <div class="paw-divider">🐾</div>
+      <div id="noteList"><div class="loading-spinner"><div class="spinner"></div>Cargando desde Firebase...</div></div>
+    </div>
+  </div>
+
+</main>
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ── Firebase Init ────────────────────────────────────
+const firebaseConfig = {
+  apiKey:            "AIzaSyAImsKBoJ-F9e6f2zOACcoBlhZzyx1kqiE",
+  authDomain:        "pagnav.firebaseapp.com",
+  projectId:         "pagnav",
+  storageBucket:     "pagnav.firebasestorage.app",
+  messagingSenderId: "496589010975",
+  appId:             "1:496589010975:web:de4dd16239bc3d05f3bd2a",
+  measurementId:     "G-Z9RRQSPLYJ"
+};
+
+const fireApp = firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// Colecciones de Coco
+const vaccinesCol = db.collection('coco_vaccines');
+const notesCol    = db.collection('coco_notes');
+const profileDoc  = db.collection('coco_config').doc('profile');
+
+// ── Sync Status ─────────────────────────────────────
+function setSyncStatus(state, msg) {
+  const dot  = document.getElementById('syncDot');
+  const text = document.getElementById('syncStatus');
+  dot.className = 'sync-dot ' + (state === 'ok' ? '' : state === 'loading' ? 'offline' : 'error');
+  text.textContent = msg;
+}
+
+// ── Toast ────────────────────────────────────────────
+function toast(msg, type='success') {
+  const tc = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = 'toast toast-' + type;
+  el.textContent = msg;
+  tc.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ── Tabs ─────────────────────────────────────────────
+function switchTab(n) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('section-' + n).classList.add('active');
+  document.getElementById('tab-' + n).classList.add('active');
+}
+
+// ── Date helpers ─────────────────────────────────────
+function fmtDate(s) {
+  if (!s) return '—';
+  const [y,m,d] = s.split('-');
+  const mo = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return `${d} ${mo[parseInt(m)-1]} ${y}`;
+}
+
+function vaccSt(nd) {
+  if (!nd) return { label:'Registrada', cls:'status-ok' };
+  const t = new Date(); t.setHours(0,0,0,0);
+  const nx = new Date(nd + 'T00:00:00');
+  const df = Math.ceil((nx - t) / 86400000);
+  if (df < 0)   return { label:'Vencida',     cls:'status-exp' };
+  if (df <= 30) return { label:`En ${df}d`,   cls:'status-due' };
+  return { label:'Al dia', cls:'status-ok' };
+}
+
+// ── Vaccines ─────────────────────────────────────────
+let vaccines = [];
+
+// Real-time listener
+vaccinesCol.orderBy('date', 'desc').onSnapshot(snap => {
+  vaccines = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderVaccines();
+  setSyncStatus('ok', 'Sincronizado con Firebase');
+}, err => {
+  console.error(err);
+  setSyncStatus('error', 'Error de conexion');
+  toast('Error al cargar vacunas: ' + err.message, 'error');
+});
+
+function renderVaccines() {
+  const list = document.getElementById('vaccineList');
+  if (!vaccines.length) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">💉</div><p>Aun no hay vacunas registradas.<br/>Agrega la primera con el boton de arriba.</p></div>';
+  } else {
+    list.innerHTML = vaccines.map(v => {
+      const st = vaccSt(v.next);
+      return `<div class="vaccine-item">
+        <div>
+          <div class="vaccine-name">${v.name}</div>
+          <div class="vaccine-meta">
+            ${v.vet   ? '👨‍⚕️ ' + v.vet   : ''}
+            ${v.batch ? ' · ' + v.batch : ''}
+            ${v.note  ? ' · ' + v.note  : ''}
+          </div>
+        </div>
+        <div class="vaccine-dates">
+          <div class="date-label">Aplicada</div>
+          <div class="date-value">${fmtDate(v.date)}</div>
+          ${v.next ? `<div class="date-label" style="margin-top:6px">Proxima</div><div class="date-value">${fmtDate(v.next)}</div>` : ''}
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+          <span class="status-badge ${st.cls}">${st.label}</span>
+          <button class="delete-btn" onclick="deleteVaccine('${v.id}')" title="Eliminar">🗑️</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  updateStats();
+}
+
+function updateStats() {
+  let ok=0, due=0, exp=0;
+  vaccines.forEach(v => {
+    const s = vaccSt(v.next);
+    if (s.cls === 'status-ok')  ok++;
+    else if (s.cls === 'status-due') due++;
+    else exp++;
+  });
+  document.getElementById('statTotal').textContent = vaccines.length;
+  document.getElementById('statOk').textContent    = ok;
+  document.getElementById('statDue').textContent   = due;
+  document.getElementById('statExp').textContent   = exp;
+}
+
+let formOpen = false;
+function toggleAddForm() {
+  formOpen = !formOpen;
+  document.getElementById('addForm').classList.toggle('open', formOpen);
+  document.getElementById('addToggleBtn').textContent = formOpen ? '✕ Cerrar' : '+ Agregar';
+  if (formOpen) document.getElementById('fName').focus();
+}
+
+async function saveVaccine() {
+  const name = document.getElementById('fName').value.trim();
+  const date = document.getElementById('fDate').value;
+  if (!name || !date) { toast('Nombre y fecha son obligatorios', 'error'); return; }
+  const btn = document.getElementById('saveVaccBtn');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  try {
+    await vaccinesCol.add({
+      name,
+      date,
+      next:  document.getElementById('fNext').value  || null,
+      vet:   document.getElementById('fVet').value.trim()   || null,
+      batch: document.getElementById('fBatch').value.trim() || null,
+      note:  document.getElementById('fNote').value.trim()  || null,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    toggleAddForm();
+    ['fName','fNext','fVet','fBatch','fNote'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('fDate').value = new Date().toISOString().split('T')[0];
+    toast('Vacuna guardada en Firebase');
+  } catch(e) {
+    toast('Error al guardar: ' + e.message, 'error');
+  }
+  btn.disabled = false; btn.textContent = 'Guardar';
+}
+
+async function deleteVaccine(id) {
+  if (!confirm('Eliminar esta vacuna?')) return;
+  try {
+    await vaccinesCol.doc(id).delete();
+    toast('Vacuna eliminada');
+  } catch(e) {
+    toast('Error al eliminar: ' + e.message, 'error');
+  }
+}
+
+// ── Profile ──────────────────────────────────────────
+profileDoc.onSnapshot(snap => {
+  if (!snap.exists) return;
+  const p = snap.data();
+  const map = {Name:'name',Breed:'breed',Birthday:'birthday',Sex:'sex',Color:'color',Weight:'weight',Chip:'chip',Vet:'vet',VetPhone:'vetphone'};
+  Object.entries(map).forEach(([k,fk]) => {
+    const el = document.getElementById('p' + k);
+    if (el && p[fk] != null) el.value = p[fk];
+  });
+}, err => console.error('Profile listener error:', err));
+
+async function saveProfile() {
+  const btn = document.getElementById('saveProfileBtn');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  try {
+    await profileDoc.set({
+      name:     document.getElementById('pName').value,
+      breed:    document.getElementById('pBreed').value,
+      birthday: document.getElementById('pBirthday').value,
+      sex:      document.getElementById('pSex').value,
+      color:    document.getElementById('pColor').value,
+      weight:   document.getElementById('pWeight').value,
+      chip:     document.getElementById('pChip').value,
+      vet:      document.getElementById('pVet').value,
+      vetphone: document.getElementById('pVetPhone').value,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    toast('Perfil guardado en Firebase');
+  } catch(e) {
+    toast('Error al guardar perfil: ' + e.message, 'error');
+  }
+  btn.disabled = false; btn.textContent = 'Guardar';
+}
+
+// ── Notes ────────────────────────────────────────────
+notesCol.orderBy('date', 'desc').onSnapshot(snap => {
+  const notes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderNotes(notes);
+}, err => {
+  console.error(err);
+  toast('Error al cargar notas: ' + err.message, 'error');
+});
+
+function renderNotes(notes) {
+  const list = document.getElementById('noteList');
+  if (!notes.length) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">📝</div><p>No hay notas aun.<br/>Registra observaciones, visitas o reacciones.</p></div>';
+  } else {
+    list.innerHTML = notes.map(n => {
+      const d = n.date ? (n.date.toDate ? n.date.toDate() : new Date(n.date)) : new Date();
+      return `<div class="note-item">
+        <div class="note-date">${d.toLocaleDateString('es-MX',{dateStyle:'long'})} · ${d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}</div>
+        <div class="note-text">${n.text}</div>
+        <div class="note-actions">
+          <button class="delete-btn" onclick="deleteNote('${n.id}')">🗑️</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+}
+
+async function saveNote() {
+  const text = document.getElementById('noteInput').value.trim();
+  if (!text) return;
+  const btn = document.getElementById('saveNoteBtn');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  try {
+    await notesCol.add({ text, date: firebase.firestore.FieldValue.serverTimestamp() });
+    document.getElementById('noteInput').value = '';
+    toast('Nota guardada en Firebase');
+  } catch(e) {
+    toast('Error al guardar nota: ' + e.message, 'error');
+  }
+  btn.disabled = false; btn.textContent = '+ Agregar nota';
+}
+
+async function deleteNote(id) {
+  if (!confirm('Eliminar esta nota?')) return;
+  try {
+    await notesCol.doc(id).delete();
+    toast('Nota eliminada');
+  } catch(e) {
+    toast('Error al eliminar: ' + e.message, 'error');
+  }
+}
+
+// ── Init ─────────────────────────────────────────────
+document.getElementById('fDate').value = new Date().toISOString().split('T')[0];
+setSyncStatus('loading', 'Conectando a Firebase...');
+</script>
+</body>
+</html>
